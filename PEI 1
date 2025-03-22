@@ -1,0 +1,200 @@
+######## ELIMINACIÓN GAUSSIANA ########
+def eliminacion_gaussiana(A, b):
+    N = len(A) # Número de ecuaciones / filas
+    A = array(A, dtype=float)
+    b = array(b, dtype=float)
+    
+    for k in range(N - 1): # En cada iteración, k es la columna pivote
+        for i in range(k + 1, N):
+            L_ik = A[i, k] / A[k, k]  # Factor de eliminación
+            A[i, j] = 0  # Asigno cero explícitamente para resolver por Gauss
+            
+            for j in range(k + 1, N):
+                A[i, j] -= L_ik * A[k, j]
+            
+            b[i] -= L_ik * b[k]
+    
+    # Sustitución hacia atrás
+    x = zeros(N)
+    for i in range(N - 1, -1, -1):
+        x[i] = (b[i] - dot(A[i, i + 1:], x[i + 1:])) / A[i, i]
+    
+    return x
+
+
+######## FACTORIZACIÓN LU Y APLICACIONES ########
+def solve_linear_system_LU(A, b):
+    """
+    Resuelve el sistema Ax = b utilizando la factorización LU.
+    Usa pivoteo parcial para mejorar la estabilidad numérica.
+    """
+    # Factorización LU con pivoteo parcial: A = P L U
+    P, L, U = sp.lu(A)
+
+    # Multiplicamos P^T por b para ajustar el vector de términos independientes
+    baux = np.matmul(P.T, b)
+    
+    # Resolución del sistema triangular inferior L y = P^T b
+    y = sp.solve_triangular(L, baux, lower=True)
+    
+    # Resolución del sistema triangular superior U x = y
+    x = sp.solve_triangular(U, y, lower=False)
+    
+    return x
+
+def determinant_LU(A):
+    """ Calcula el determinante de una matriz A usando la factorización LU. """
+    P, L, U = sp.lu(A)
+    det_P = np.linalg.det(P)
+    det_U = np.prod(np.diag(U))  # Producto de la diagonal de U
+    return det_P * det_U
+
+"""P.T = traspuesta de P
+@ = usado para multiplicar matrices"""
+def inverse_LU(A):
+    P, L, U = sp.lu(A)
+    I = np.eye(A.shape[0])  # Matriz identidad
+    # Resolver L y = P^T * I
+    Y = sp.solve_triangular(L, P.T @ I, lower=True)
+    # Resolver U X = Y
+    X = sp.solve_triangular(U, Y, lower=False)
+    return X
+
+def condition_number(A):
+    """ Calcula el número de condición de una matriz A usando LU. """
+    A_inv = inverse_LU(A)  # Hallamos la inversa con LU
+    norm_A = np.linalg.norm(A, ord=2)  # Norma de A
+    norm_A_inv = np.linalg.norm(A_inv, ord=2)  # Norma de A⁻¹
+    return norm_A * norm_A_inv  # Número de condición
+
+
+########  MÉTODOS ITERATIVOS ########
+def definir_matrices(A):
+    D = np.zeros_like(A)
+    L = np.zeros_like(A)
+    U = np.zeros_like(A)
+    N = len(A)
+    for i in range (N):
+        for j in range (N):
+            if i == j:
+                D[i, j] = A[i, j]
+            elif i < j:
+                U[i, j] = A[i, j]
+            elif j < i:
+                L[i, j] = A[i, j]
+    return D, L, U
+
+# Jacobi
+
+T = -np.linalg.inv(D) @ (L + U)
+C = np.linalg.inv(D) @ b
+
+x = np.zeros_like(C)  # Vector inicial de ceros
+tolerancia = 1e-6 # Tolerancia para la convergencia (lo elijo yo)
+max_iter = 100 # Número máximo de iteraciones (lo elijo yo)
+error = np.inf  # Inicializar error como infinito
+
+for k in range (max_iter):
+    x_nuevo = T @ x + C
+    x = x_nuevo # Actualizo el x anterior
+    error = (np.linalg.norm(x_nuevo - x)) / (np.linalg.norm(x_nuevo))
+    if error < tolerancia:
+        break
+
+# Gauss-Seidel
+
+T = -np.linalg.inv(D + L) @ U
+C = np.linalg.inv(D + L) @ b
+
+x = np.zeros_like(C)  # Vector inicial de ceros
+tolerancia = 1e-6 # Tolerancia para la convergencia (lo elijo yo)
+max_iter = 100 # Número máximo de iteraciones (lo elijo yo)
+error = np.inf  # Inicializar error como infinito
+
+for k in range (max_iter):
+    x_nuevo = T @ x + C
+    x = x_nuevo # Actualizar x con el nuevo valor
+    error = (np.linalg.norm(x_nuevo - x)) / (np.linalg.norm(x_nuevo))
+    if error < tolerancia:
+        break
+
+
+###### MÉTODOS ITERATIVOS ######
+def metodo_potencia(A, umax, Nmaxiter, tol):
+    lambda_max = np.linalg.norm(umax)
+    umax = umax / lambda_max  # Normalización inicial
+    
+    for i in range(Nmaxiter):
+        unew = np.dot(A, umax)
+        lambda_new = np.linalg.norm(unew)
+        
+        if lambda_new == 0:
+            raise ValueError("La matriz tiene un autovalor 0 o está mal condicionada")
+
+        if np.dot(umax, unew) < 0:
+            lambda_new = -lambda_new  # Ajuste de signo para evitar problemas de numeración
+
+        unew = unew / lambda_new  # Normalización de la nueva aproximación
+
+        if np.linalg.norm(unew - umax) < tol:
+            return lambda_new, unew  # Retorna autovalor y autovector
+
+        umax = unew  # Actualización del vector
+        
+    return lambda_new, umax  # Retorna la mejor aproximación si no converge antes
+
+def metodo_potencia_inversa(A, u0, Nmaxiter, tol):
+    A_inv = np.linalg.inv(A)  # Invertimos la matriz A
+    lambda_old = 0
+    u = u0 / np.linalg.norm(u0)  # Normalización inicial
+    
+    for i in range(Nmaxiter):
+        v = np.dot(A_inv, u)  # Multiplicación con la inversa de A
+        lambda_new = np.linalg.norm(v)
+        
+        if lambda_new == 0:
+            raise ValueError("El método falló: la matriz tiene un autovalor 0 o está mal condicionada.")
+        
+        v = v / lambda_new  # Normalización
+        
+        if np.linalg.norm(v - u) < tol:
+            return 1 / lambda_new, v  # Retornamos el menor autovalor y su autovector asociado
+        
+        u = v
+        
+    return 1 / lambda_new, u  # Retorna la mejor aproximación si no converge antes
+
+# Ejemplo de uso
+A = np.array([[4, 1], [2, 3]])
+u0 = np.array([1, 1])  # Vector inicial
+tol = 1e-6
+Nmaxiter = 100
+autovalor, autovector = metodo_potencia_inversa(A, u0, Nmaxiter, tol)
+print("Autovalor mínimo:", autovalor)
+print("Autovector asociado:", autovector)
+
+
+
+#### MÉTODO DE LA POTENCIA DESPLAZADA ####
+
+def metodo_potencia_desplazada(A, mu, u0, Nmaxiter, tol):
+    n = A.shape[0]
+    I = np.eye(n)  # Matriz identidad
+    A_mu = A - mu * I  # Matriz desplazada
+    
+    try:
+        A_mu_inv = np.linalg.inv(A_mu)  # Intentamos invertir la matriz
+    except np.linalg.LinAlgError:
+        raise ValueError("La matriz desplazada es singular. Elige otro valor de mu.")
+    
+    u = u0 / np.linalg.norm(u0)  # Normalización inicial
+    for i in range(Nmaxiter):
+        v = np.dot(A_mu_inv, u)  # Multiplicación con la inversa de (A - mu*I)
+        lambda_new = np.dot(u, v) / np.dot(u, u)  # Rayleigh quotient
+        
+        v = v / np.linalg.norm(v)  # Normalización
+        
+        if np.linalg.norm(v - u) < tol:
+            return lambda_new + mu, v  # Ajuste por desplazamiento
+        u = v
+    return lambda_new + mu, u  # Retorna la mejor aproximación si no converge antes
